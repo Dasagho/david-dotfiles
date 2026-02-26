@@ -32,7 +32,7 @@ func newSelectorModel(programs []catalog.Program) selectorModel {
 				Filterable(true).
 				Value(&result),
 		),
-	).WithHeight(20)
+	).WithTheme(huhTheme).WithHeight(20)
 
 	return selectorModel{
 		form:     form,

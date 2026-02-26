@@ -7,15 +7,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/dsaleh/david-dotfiles/internal/catalog"
 )
 
 // ─── styles ──────────────────────────────────────────────────────────────────
 
-var (
-	pickerAddedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-)
+// (picker visual styling is delegated to huhTheme)
 
 // ─── picker phases ────────────────────────────────────────────────────────────
 
@@ -76,7 +73,7 @@ func newPickerModel(programName, installDir string) pickerModel {
 				DirAllowed(false).
 				Value(m.browseResult),
 		),
-	)
+	).WithTheme(huhTheme)
 	return m
 }
 
@@ -136,7 +133,7 @@ func (m pickerModel) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return nil
 					}),
 			),
-		)
+		).WithTheme(huhTheme)
 		m.phase = phaseNaming
 		return m, m.namingForm.Init()
 
@@ -185,7 +182,7 @@ func (m pickerModel) updateNaming(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Negative("No, done").
 					Value(m.addAnother),
 			),
-		)
+		).WithTheme(huhTheme)
 		m.phase = phaseConfirm
 		return m, m.confirmForm.Init()
 
@@ -206,7 +203,7 @@ func (m pickerModel) updateNaming(msg tea.Msg) (tea.Model, tea.Cmd) {
 					DirAllowed(false).
 					Value(m.browseResult),
 			),
-		)
+		).WithTheme(huhTheme)
 		m.phase = phaseBrowse
 		return m, m.browseForm.Init()
 	}
@@ -242,7 +239,7 @@ func (m pickerModel) updateConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 						DirAllowed(false).
 						Value(m.browseResult),
 				),
-			)
+			).WithTheme(huhTheme)
 			m.phase = phaseBrowse
 			return m, m.browseForm.Init()
 		}
