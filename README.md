@@ -65,30 +65,48 @@ useful when debugging a 404:
 
 ## Using the TUI
 
-When you run the installer a full-screen terminal interface opens:
+The installer is driven by [charmbracelet/huh](https://github.com/charmbracelet/huh)
+forms and has three screens:
+
+### 1. Program selector
+
+A filterable multi-select list. Use `/` to type a filter, `space` to toggle,
+`enter` to confirm, `q` to quit.
+
+| Key       | Action                    |
+|-----------|---------------------------|
+| `↑` `↓`  | Move cursor               |
+| `space`   | Toggle selection          |
+| `/`       | Filter programs           |
+| `enter`   | Install selected programs |
+| `q`       | Quit                      |
+
+### 2. Progress screen
+
+Shows a live status line per program as they install in parallel:
 
 ```
-  fzf          fuzzy finder
-  ripgrep      fast grep replacement
-> nvim         neovim editor
-  tealdeer     tldr client
-  kitty        terminal emulator
+  Installing programs
 
-  space  toggle   a  select all   enter  install   q  quit
+  ✓ fzf                  0.60.0
+  · nvim                 extracting
+  - ripgrep              0.10.9 (already up to date)
+  ✗ kitty                404 not found
+
+  Press any key to exit
 ```
 
-| Key     | Action                          |
-|---------|---------------------------------|
-| `↑` `↓` | Move cursor                     |
-| `space` | Toggle selection                |
-| `a`     | Select / deselect all           |
-| `enter` | Install selected programs       |
-| `q`     | Quit                            |
+### 3. Binary picker (programs without a `bin` list)
 
-After pressing `enter`, a progress screen shows the live status of each
-install. When everything is done, the binaries are ready to use immediately
-from any new terminal (or the current one if `~/.local/bin` is already on your
-`PATH`).
+If a program's catalog entry has no `bin` field, the installer pauses and
+opens an interactive file browser pointed at the extracted archive directory.
+Navigate to the binary, press `enter` to select it, then confirm the symlink
+name. You can add multiple binaries from the same archive. Press `esc` when
+finished.
+
+After all installs complete, press any key to exit. Binaries are immediately
+available in any new terminal (or the current one if `~/.local/bin` is already
+on your `PATH`).
 
 ---
 
@@ -109,7 +127,7 @@ bin           = [{src = "delta-{version}-x86_64-unknown-linux-musl/delta", dst =
 | `repo`          | GitHub repository in `owner/repo` format                                    |
 | `asset_pattern` | Filename of the release asset. Use `{version}` as a placeholder for the version number (without the leading `v`) |
 | `packages`      | System commands that must be on `PATH` before install (leave `[]` if none)  |
-| `bin`           | List of binaries to symlink. `src` is the path inside the extracted archive; `dst` is the name placed in `~/.local/bin` |
+| `bin`           | List of binaries to symlink. `src` is the path inside the extracted archive; `dst` is the name placed in `~/.local/bin`. **If omitted**, the installer will pause and open an interactive file browser after extraction so you can pick the binary manually. |
 
 To find the right `asset_pattern`, go to the GitHub releases page of the repo
 and copy the filename of the Linux x86_64 asset, then replace the version
@@ -127,8 +145,8 @@ catalog.toml
      │                    Produces a sorted list of Program structs.
      │
      ▼
-  TUI selector            Bubbletea full-screen list. The user toggles
-     │                    programs and presses enter.
+  TUI selector            huh.MultiSelect form. The user toggles programs
+     │                    with space, filters with /, and presses enter.
      │
      ▼
   preflight check         Ensures ~/.local/bin and ~/.local/share exist.
@@ -158,6 +176,14 @@ catalog.toml
      │                      anything else   →  treated as a raw binary
      │                    Files land in ~/.local/share/{name}/.
      │
+     ├── bin picker       If the catalog entry has no `bin` field, the
+     │   (optional)       installer pauses and emits an AwaitingBinSelection
+     │                    event. The TUI switches to a huh.FilePicker form
+     │                    so the user can navigate the extracted directory
+     │                    and select one or more binaries interactively.
+     │                    The chosen paths and symlink names are sent back
+     │                    to the installer goroutine via a channel.
+     │
      └── symlink          Creates ~/.local/bin/{dst} → ~/.local/share/{name}/{src}
                           for each bin entry. Replaces existing symlinks;
                           errors if a regular file (not a symlink) is in the way.
@@ -170,3 +196,13 @@ catalog.toml
 
 Programs are installed in parallel (up to 3 at a time). Each one is
 independent — a failure in one does not affect the others.
+
+### TUI package structure
+
+| File | Responsibility |
+|---|---|
+| `tui/model.go` | Root Bubbletea model; screen routing; `openNextPicker` |
+| `tui/selector.go` | `huh.MultiSelect` program picker |
+| `tui/picker.go` | Three-phase bin picker: browse (`huh.FilePicker`), name (`huh.Input`), confirm (`huh.Confirm`) |
+| `tui/progress.go` | Live install progress; picker queue management |
+| `tui/theme.go` | Shared `huh.ThemeCharm()` applied to all forms |
