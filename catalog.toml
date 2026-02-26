@@ -2,28 +2,23 @@
 repo          = "junegunn/fzf"
 asset_pattern = "fzf-{version}-linux_amd64.tar.gz"
 packages      = []
-bin           = [{src = "fzf", dst = "fzf"}]
 
 [programs.ripgrep]
 repo          = "BurntSushi/ripgrep"
 asset_pattern = "ripgrep-{version}-x86_64-unknown-linux-musl.tar.gz"
 packages      = []
-bin           = [{src = "ripgrep-{version}-x86_64-unknown-linux-musl", dst = "rg"}]
 
 [programs.tealdeer]
 repo          = "tealdeer-rs/tealdeer"
 asset_pattern = "tealdeer-linux-x86_64-musl"
 packages      = []
-bin           = [{src = "installer-3486999456-tealdeer-linux-x86_64-musl", dst = "tldr"}]
 
 [programs.nvim]
 repo          = "neovim/neovim"
 asset_pattern = "nvim-linux-x86_64.tar.gz"
 packages      = []
-bin           = [{src = "nvim-linux-x86_64/bin/nvim", dst = "nvim"}]
 
 [programs.kitty]
 repo          = "kovidgoyal/kitty"
 asset_pattern = "kitty-{version}-x86_64.txz"
 packages      = []
-bin           = [{src = "bin/kitty", dst = "kitty"}]

@@ -28,13 +28,17 @@ type progressModel struct {
 	order   []string
 	ch      <-chan installer.ProgressMsg
 	done    bool
+	// pickerQueue holds AwaitingBinSelection messages waiting for the TUI to handle.
+	pickerQueue []installer.ProgressMsg
 }
 
+// waitForProgress returns a tea.Cmd that blocks until the next ProgressMsg.
+// It is always driven by the root model — never scheduled from within progressModel.
 func waitForProgress(ch <-chan installer.ProgressMsg) tea.Cmd {
 	return func() tea.Msg {
 		msg, ok := <-ch
 		if !ok {
-			return nil
+			return nil // channel closed
 		}
 		return msg
 	}
@@ -48,37 +52,44 @@ func newProgressModel(programs []string, ch <-chan installer.ProgressMsg) progre
 	return progressModel{entries: entries, order: programs, ch: ch}
 }
 
-func (m progressModel) Init() tea.Cmd {
-	return waitForProgress(m.ch)
+// applyMsg updates state from a ProgressMsg. Returns true if the message was
+// an AwaitingBinSelection (caller should open picker).
+func (m *progressModel) applyMsg(msg installer.ProgressMsg) {
+	if e, ok := m.entries[msg.Program]; ok {
+		e.state = msg.State
+		e.version = msg.Version
+		e.err = msg.Err
+	}
+	if msg.State == installer.StateAwaitingBinSelection {
+		m.pickerQueue = append(m.pickerQueue, msg)
+	}
 }
 
+// allTerminal returns true when every entry has reached a terminal state AND
+// there are no picker interactions still pending.
+func (m *progressModel) allTerminal() bool {
+	if len(m.pickerQueue) > 0 {
+		return false
+	}
+	for _, e := range m.entries {
+		switch e.state {
+		case installer.StateDone, installer.StateSkipped, installer.StateError:
+			// terminal
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// progressModel.Update is intentionally minimal — it only handles the "press
+// any key to exit" interaction once done=true. ALL channel reading and picker
+// routing is done by the root model.
+func (m progressModel) Init() tea.Cmd { return nil }
+
 func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		if m.done {
-			return m, tea.Quit
-		}
-	case installer.ProgressMsg:
-		if e, ok := m.entries[msg.Program]; ok {
-			e.state = msg.State
-			e.version = msg.Version
-			e.err = msg.Err
-		}
-		// Check if all done
-		allDone := true
-		for _, e := range m.entries {
-			if e.state != installer.StateDone && e.state != installer.StateSkipped && e.state != installer.StateError {
-				allDone = false
-				break
-			}
-		}
-		if allDone {
-			m.done = true
-			return m, nil
-		}
-		return m, waitForProgress(m.ch)
-	case nil:
-		m.done = true
+	if _, ok := msg.(tea.KeyMsg); ok && m.done {
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -111,9 +122,7 @@ func (m progressModel) View() string {
 
 	if m.done {
 		sb.WriteString(fmt.Sprintf("\n  %d installed, %d skipped, %d failed\n", installed, skipped, failed))
-		if failed == 0 {
-			sb.WriteString("\n  Press any key to exit\n")
-		}
+		sb.WriteString("\n  Press any key to exit\n")
 	}
 	return sb.String()
 }

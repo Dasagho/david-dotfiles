@@ -29,9 +29,7 @@ func Load(path string) ([]Program, error) {
 		if p.AssetPattern == "" {
 			fieldErrs = append(fieldErrs, "asset_pattern is required")
 		}
-		if len(p.Bin) == 0 {
-			fieldErrs = append(fieldErrs, "bin must not be empty")
-		}
+		// bin is optional — if empty, the user picks binaries interactively at install time
 		if len(fieldErrs) > 0 {
 			errs = append(errs, fmt.Sprintf("[%s]: %s", name, strings.Join(fieldErrs, ", ")))
 			continue

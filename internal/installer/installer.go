@@ -26,6 +26,7 @@ const (
 	StateFetchingVersion
 	StateDownloading
 	StateExtracting
+	StateAwaitingBinSelection // extraction done, waiting for user to pick binaries
 	StateLinking
 	StateDone
 	StateSkipped
@@ -35,16 +36,20 @@ const (
 func (s State) String() string {
 	return [...]string{
 		"pending", "fetching version", "downloading",
-		"extracting", "linking", "done", "skipped", "error",
+		"extracting", "awaiting bin selection", "linking", "done", "skipped", "error",
 	}[s]
 }
 
 // ProgressMsg is sent over the progress channel for each state transition.
+// When State is StateAwaitingBinSelection, BinCh is non-nil. The receiver
+// must send the selected []catalog.Bin on BinCh (or close it to abort).
 type ProgressMsg struct {
-	Program string
-	State   State
-	Version string
-	Err     error
+	Program    string
+	State      State
+	Version    string
+	InstallDir string               // set when State == StateAwaitingBinSelection
+	BinCh      chan<- []catalog.Bin // set when State == StateAwaitingBinSelection
+	Err        error
 }
 
 const workerCount = 3
@@ -135,12 +140,29 @@ func install(ctx context.Context, client *gh.Client, p catalog.Program, ch chan<
 	// Write version file.
 	os.WriteFile(versionFile, []byte(version), 0644)
 
+	// Ask the TUI to let the user select which binaries to symlink.
+	binCh := make(chan []catalog.Bin, 1)
+	send(ch, ProgressMsg{
+		Program:    p.Name,
+		State:      StateAwaitingBinSelection,
+		Version:    version,
+		InstallDir: installDir,
+		BinCh:      binCh,
+	})
+
+	// Block until the TUI sends back the selected bins (or closes the channel).
+	bins, ok := <-binCh
+	if !ok || len(bins) == 0 {
+		// User cancelled or chose nothing — mark as done without linking.
+		send(ch, ProgressMsg{Program: p.Name, State: StateDone, Version: version})
+		return
+	}
+
 	// Symlink binaries.
 	send(ch, ProgressMsg{Program: p.Name, State: StateLinking, Version: version})
 	binDir := system.BinPath()
-	for _, b := range p.Bin {
-		src := filepath.Join(installDir, strings.ReplaceAll(b.Src, "{version}", version))
-		if err := linker.Link(src, binDir, b.Dst); err != nil {
+	for _, b := range bins {
+		if err := linker.Link(b.Src, binDir, b.Dst); err != nil {
 			send(ch, ProgressMsg{Program: p.Name, State: StateError, Err: fmt.Errorf("link %s: %w", b.Dst, err)})
 			return
 		}
