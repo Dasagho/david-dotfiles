@@ -1,0 +1,27 @@
+services:
+  build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Target the builder stage so the container has a real shell/filesystem.
+      target: builder
+    # Override the default entrypoint so the container runs the build command
+    # and exits immediately — it is not a long-running service.
+    entrypoint: []
+    command:
+      - go
+      - build
+      - -trimpath
+      - -ldflags=-s -w
+      - -o
+      - /out/installer
+      - ./cmd/main.go
+    volumes:
+      # Mount the project root read-only so local edits are picked up without
+      # rebuilding the image (dependencies are already cached in the image).
+      - .:/src:ro
+      # Mount a host directory to receive the compiled binary.
+      # Run:  mkdir -p dist
+      # Then: docker compose run --rm build
+      # The binary will appear at dist/installer on the host.
+      - ./dist:/out

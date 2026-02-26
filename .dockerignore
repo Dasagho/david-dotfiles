@@ -1,0 +1,11 @@
+# Build artifacts
+dist/
+main
+
+# Docker files (not needed inside the build context)
+Dockerfile
+docker-compose.yml
+
+# Editor / tooling
+.opencode/
+.git/
