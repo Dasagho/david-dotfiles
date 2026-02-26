@@ -1,0 +1,11 @@
+[programs.fzf]
+repo          = "junegunn/fzf"
+asset_pattern = "fzf-{version}-linux_amd64.tar.gz"
+packages      = []
+bin           = [{src = "fzf", dst = "fzf"}]
+
+[programs.ripgrep]
+repo          = "BurntSushi/ripgrep"
+asset_pattern = "ripgrep-{version}-x86_64-unknown-linux-musl.tar.gz"
+packages      = []
+bin           = [{src = "ripgrep-{version}-x86_64-unknown-linux-musl/rg", dst = "rg"}]
