@@ -226,7 +226,9 @@ func (m *RootModel) openNextPicker() tea.Cmd {
 		picker.width = m.windowWidth
 		picker.height = m.windowHeight
 		if picker.browseForm != nil {
-			picker.browseForm = picker.browseForm.WithWidth(m.windowWidth)
+			picker.browseForm = picker.browseForm.
+				WithWidth(m.windowWidth).
+				WithHeight(m.windowHeight)
 		}
 	}
 	m.picker = picker

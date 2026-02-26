@@ -83,9 +83,18 @@ func (m pickerModel) Init() tea.Cmd {
 }
 
 func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Always track window size.
+	// Always track window size and resize the active form immediately.
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width, m.height = ws.Width, ws.Height
+		if m.browseForm != nil {
+			m.browseForm = m.browseForm.WithWidth(ws.Width).WithHeight(ws.Height)
+		}
+		if m.namingForm != nil {
+			m.namingForm = m.namingForm.WithWidth(ws.Width).WithHeight(ws.Height)
+		}
+		if m.confirmForm != nil {
+			m.confirmForm = m.confirmForm.WithWidth(ws.Width).WithHeight(ws.Height)
+		}
 		return m, nil
 	}
 
@@ -205,7 +214,7 @@ func (m pickerModel) updateNaming(msg tea.Msg) (tea.Model, tea.Cmd) {
 					Picking(true).
 					Value(m.browseResult),
 			),
-		).WithTheme(huhTheme)
+		).WithTheme(huhTheme).WithWidth(m.width).WithHeight(m.height)
 		m.phase = phaseBrowse
 		return m, m.browseForm.Init()
 	}
@@ -242,7 +251,7 @@ func (m pickerModel) updateConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Picking(true).
 						Value(m.browseResult),
 				),
-			).WithTheme(huhTheme)
+			).WithTheme(huhTheme).WithWidth(m.width).WithHeight(m.height)
 			m.phase = phaseBrowse
 			return m, m.browseForm.Init()
 		}
