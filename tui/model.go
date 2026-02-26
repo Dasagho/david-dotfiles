@@ -225,6 +225,9 @@ func (m *RootModel) openNextPicker() tea.Cmd {
 	if m.windowWidth > 0 {
 		picker.width = m.windowWidth
 		picker.height = m.windowHeight
+		if picker.browseForm != nil {
+			picker.browseForm = picker.browseForm.WithWidth(m.windowWidth)
+		}
 	}
 	m.picker = picker
 	m.screen = screenBinPicker
