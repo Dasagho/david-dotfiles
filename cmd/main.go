@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,10 +15,14 @@ import (
 )
 
 func main() {
+	verbose := flag.Bool("verbose", false, "print resolved download URLs and version info to stderr")
+	flag.BoolVar(verbose, "v", false, "shorthand for --verbose")
+	flag.Parse()
+
 	// Find catalog.toml relative to binary location or working dir.
 	catalogPath := "catalog.toml"
-	if len(os.Args) > 1 {
-		catalogPath = os.Args[1]
+	if flag.NArg() > 0 {
+		catalogPath = flag.Arg(0)
 	}
 
 	programs, err := catalog.Load(catalogPath)
@@ -34,7 +39,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	model := tui.New(programs, ctx)
+	model := tui.New(programs, ctx, *verbose)
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)

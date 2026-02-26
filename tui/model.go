@@ -29,6 +29,7 @@ type RootModel struct {
 	progress  progressModel
 	programs  []catalog.Program
 	ctx       context.Context
+	verbose   bool
 }
 
 type preflightModel struct {
@@ -46,12 +47,13 @@ func (m preflightModel) View() string {
 }
 
 // New creates the root TUI model.
-func New(programs []catalog.Program, ctx context.Context) RootModel {
+func New(programs []catalog.Program, ctx context.Context, verbose bool) RootModel {
 	return RootModel{
 		screen:   screenSelector,
 		selector: newSelectorModel(programs),
 		programs: programs,
 		ctx:      ctx,
+		verbose:  verbose,
 	}
 }
 
@@ -94,7 +96,7 @@ func (m RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i, p := range selected {
 				names[i] = p.Name
 			}
-			ch := installer.Run(m.ctx, selected)
+			ch := installer.Run(m.ctx, selected, m.verbose)
 			m.progress = newProgressModel(names, ch)
 			m.screen = screenProgress
 			return m, m.progress.Init()

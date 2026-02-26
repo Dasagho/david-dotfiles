@@ -51,7 +51,8 @@ const workerCount = 3
 
 // Run installs the given programs concurrently, sending progress updates to the returned channel.
 // The channel is closed when all installs complete.
-func Run(ctx context.Context, programs []catalog.Program) <-chan ProgressMsg {
+// When verbose is true, resolved download URLs and version info are printed to stderr.
+func Run(ctx context.Context, programs []catalog.Program, verbose bool) <-chan ProgressMsg {
 	ch := make(chan ProgressMsg, len(programs)*8)
 	client := gh.NewClient("")
 
@@ -67,7 +68,7 @@ func Run(ctx context.Context, programs []catalog.Program) <-chan ProgressMsg {
 			go func() {
 				defer wg.Done()
 				defer func() { <-sem }()
-				install(ctx, client, p, ch)
+				install(ctx, client, p, ch, verbose)
 			}()
 		}
 		wg.Wait()
@@ -80,7 +81,7 @@ func send(ch chan<- ProgressMsg, msg ProgressMsg) {
 	ch <- msg
 }
 
-func install(ctx context.Context, client *gh.Client, p catalog.Program, ch chan<- ProgressMsg) {
+func install(ctx context.Context, client *gh.Client, p catalog.Program, ch chan<- ProgressMsg, verbose bool) {
 	send(ch, ProgressMsg{Program: p.Name, State: StateFetchingVersion})
 
 	version, err := client.LatestVersion(ctx, p.Repo)
@@ -102,6 +103,10 @@ func install(ctx context.Context, client *gh.Client, p catalog.Program, ch chan<
 	// Resolve download URL.
 	assetName := strings.ReplaceAll(p.AssetPattern, "{version}", version)
 	downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/v%s/%s", p.Repo, version, assetName)
+
+	if verbose {
+		fmt.Fprintf(os.Stderr, "[verbose] %s: version=%s url=%s\n", p.Name, version, downloadURL)
+	}
 
 	// Download with retry.
 	send(ch, ProgressMsg{Program: p.Name, State: StateDownloading, Version: version})
@@ -171,7 +176,7 @@ func download(ctx context.Context, url, assetName string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("download returned status %d for %s", resp.StatusCode, url)
 	}
 	if resp.ContentLength == 0 {
 		return "", fmt.Errorf("empty response body")
