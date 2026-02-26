@@ -71,6 +71,7 @@ func newPickerModel(programName, installDir string) pickerModel {
 				ShowHidden(false).
 				FileAllowed(true).
 				DirAllowed(false).
+				Picking(true).
 				Value(m.browseResult),
 		),
 	).WithTheme(huhTheme)
@@ -201,6 +202,7 @@ func (m pickerModel) updateNaming(msg tea.Msg) (tea.Model, tea.Cmd) {
 					ShowHidden(false).
 					FileAllowed(true).
 					DirAllowed(false).
+					Picking(true).
 					Value(m.browseResult),
 			),
 		).WithTheme(huhTheme)
@@ -237,6 +239,7 @@ func (m pickerModel) updateConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 						ShowHidden(false).
 						FileAllowed(true).
 						DirAllowed(false).
+						Picking(true).
 						Value(m.browseResult),
 				),
 			).WithTheme(huhTheme)
