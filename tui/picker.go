@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dsaleh/david-dotfiles/internal/catalog"
 )
@@ -23,8 +23,6 @@ var (
 	pickerFileStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	pickerAddedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
 	pickerHintStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	pickerInputStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("12")).Padding(0, 1)
-	pickerLabelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	pickerPathStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Italic(true)
 )
 
@@ -47,10 +45,6 @@ const (
 
 // ─── pickerModel ─────────────────────────────────────────────────────────────
 
-// pickerModel lets the user:
-//  1. Navigate the extracted dir and pick the binary file  (phaseBrowse)
-//  2. Type / edit the symlink name                         (phaseNaming)
-//  3. Repeat for more bins, then press 'd' to confirm all
 type pickerModel struct {
 	programName string
 	installDir  string // root of extracted archive
@@ -59,7 +53,9 @@ type pickerModel struct {
 	entries []fileEntry // contents of currentDir
 	cursor  int         // which entry is highlighted
 
-	input       textinput.Model
+	namingForm   *huh.Form
+	namingResult *string // heap-allocated so form's captured pointer stays valid
+
 	phase       pickerPhase
 	selectedSrc string        // absolute path chosen in phaseBrowse
 	added       []catalog.Bin // bins confirmed so far
@@ -72,15 +68,10 @@ type pickerModel struct {
 }
 
 func newPickerModel(programName, installDir string) pickerModel {
-	ti := textinput.New()
-	ti.Placeholder = "symlink name"
-	ti.CharLimit = 128
-
 	m := pickerModel{
 		programName: programName,
 		installDir:  installDir,
 		currentDir:  installDir,
-		input:       ti,
 		phase:       phaseBrowse,
 	}
 	m.loadDir()
@@ -177,13 +168,27 @@ func (m pickerModel) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentDir = e.path
 			m.loadDir()
 		} else {
-			// File selected — move to naming phase.
+			// File selected — move to huh naming phase.
 			m.selectedSrc = e.path
-			m.input.SetValue(e.name)
-			m.input.CursorEnd()
-			m.input.Focus()
+			namingResult := e.name // pre-fill with filename; heap-allocated
+			m.namingResult = &namingResult
+			m.namingForm = huh.NewForm(
+				huh.NewGroup(
+					huh.NewInput().
+						Title("Symlink name for: " + filepath.Base(e.path)).
+						Description("Name that will appear in ~/.local/bin/").
+						Placeholder(e.name).
+						Value(m.namingResult).
+						Validate(func(s string) error {
+							if strings.TrimSpace(s) == "" {
+								return fmt.Errorf("name cannot be empty")
+							}
+							return nil
+						}),
+				),
+			)
 			m.phase = phaseNaming
-			return m, textinput.Blink
+			return m, m.namingForm.Init()
 		}
 
 	case "left", "h":
@@ -202,26 +207,24 @@ func (m pickerModel) updateBrowse(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m pickerModel) updateNaming(msg tea.Msg) (tea.Model, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
-	if !ok {
-		// Forward non-key messages to the text input.
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
-		return m, cmd
-	}
-
-	switch key.String() {
-	case "ctrl+c":
+	// ctrl+c → quit
+	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "ctrl+c" {
 		m.quit = true
 		return m, tea.Quit
+	}
 
-	case "esc":
-		m.phase = phaseBrowse
-		m.input.Blur()
-		return m, nil
+	form, cmd := m.namingForm.Update(msg)
+	if f, ok := form.(*huh.Form); ok {
+		m.namingForm = f
+	}
 
-	case "enter":
-		name := strings.TrimSpace(m.input.Value())
+	switch m.namingForm.State {
+	case huh.StateCompleted:
+		// m.namingResult was written by huh via the pointer
+		name := ""
+		if m.namingResult != nil {
+			name = strings.TrimSpace(*m.namingResult)
+		}
 		if name == "" {
 			name = filepath.Base(m.selectedSrc)
 		}
@@ -229,14 +232,17 @@ func (m pickerModel) updateNaming(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Src: m.selectedSrc,
 			Dst: name,
 		})
+		m.namingForm = nil
 		m.phase = phaseBrowse
-		m.input.Blur()
-		m.input.SetValue("")
+		return m, nil
+
+	case huh.StateAborted:
+		// esc/q → back to browse without adding
+		m.namingForm = nil
+		m.phase = phaseBrowse
 		return m, nil
 	}
 
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
 	return m, cmd
 }
 
@@ -332,21 +338,8 @@ func (m pickerModel) viewBrowse() string {
 }
 
 func (m pickerModel) viewNaming() string {
-	var b strings.Builder
-
-	rel, _ := filepath.Rel(m.installDir, m.selectedSrc)
-
-	b.WriteString("\n")
-	b.WriteString(pickerLabelStyle.Render("  Name the symlink for: "))
-	b.WriteString(pickerPathStyle.Render(rel))
-	b.WriteString("\n\n")
-
-	inputView := pickerInputStyle.Render(m.input.View())
-	b.WriteString("  ")
-	b.WriteString(inputView)
-	b.WriteString("\n\n")
-
-	b.WriteString(pickerHintStyle.Render("  enter: confirm   esc: back   ctrl+c: cancel"))
-
-	return b.String()
+	if m.namingForm == nil {
+		return ""
+	}
+	return m.namingForm.View()
 }
