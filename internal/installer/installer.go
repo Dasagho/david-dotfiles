@@ -84,11 +84,12 @@ func send(ch chan<- ProgressMsg, msg ProgressMsg) {
 func install(ctx context.Context, client *gh.Client, p catalog.Program, ch chan<- ProgressMsg, verbose bool) {
 	send(ch, ProgressMsg{Program: p.Name, State: StateFetchingVersion})
 
-	version, err := client.LatestVersion(ctx, p.Repo)
+	rel, err := client.LatestRelease(ctx, p.Repo)
 	if err != nil {
 		send(ch, ProgressMsg{Program: p.Name, State: StateError, Err: err})
 		return
 	}
+	version := rel.Version
 
 	// Check if already installed at this version.
 	installDir := filepath.Join(system.SharePath(), p.Name)
@@ -101,8 +102,11 @@ func install(ctx context.Context, client *gh.Client, p catalog.Program, ch chan<
 	}
 
 	// Resolve download URL.
+	// Use the raw tag (e.g. "v15.1.0" or "15.1.0") as the path segment so the
+	// URL matches exactly what GitHub has, regardless of whether the repo uses
+	// a "v"-prefixed tag or a bare version tag.
 	assetName := strings.ReplaceAll(p.AssetPattern, "{version}", version)
-	downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/v%s/%s", p.Repo, version, assetName)
+	downloadURL := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", p.Repo, rel.Tag, assetName)
 
 	if verbose {
 		fmt.Fprintf(os.Stderr, "[verbose] %s: version=%s url=%s\n", p.Name, version, downloadURL)
