@@ -5,6 +5,17 @@ services:
       dockerfile: Dockerfile
       # Target the builder stage so the container has a real shell/filesystem.
       target: builder
+    # Run as the host user so the output binary is owned by them, not root.
+    # The UID/GID are read from the environment; set them in a .env file or
+    # export them in your shell before running docker compose:
+    #   export UID GID && docker compose run --rm build
+    user: "${UID:-1000}:${GID:-1000}"
+    # Redirect Go's build cache to /out/.cache so the non-root user can write
+    # to it. The cache is preserved across runs via the host-mounted dist/ dir,
+    # which also speeds up incremental rebuilds.
+    environment:
+      GOCACHE: /out/.cache/go-build
+      GOMODCACHE: /out/.cache/go-mod
     # Override the default entrypoint so the container runs the build command
     # and exits immediately — it is not a long-running service.
     entrypoint: []
