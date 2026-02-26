@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ulikunitz/xz"
 )
 
 // Extract dispatches to the correct extraction strategy based on the file extension.
@@ -19,7 +21,7 @@ func Extract(srcPath, dstDir string) error {
 	switch {
 	case strings.HasSuffix(name, ".tar.gz") || strings.HasSuffix(name, ".tgz"):
 		return extractTar(srcPath, dstDir, "gz")
-	case strings.HasSuffix(name, ".tar.xz"):
+	case strings.HasSuffix(name, ".tar.xz") || strings.HasSuffix(name, ".txz"):
 		return extractTar(srcPath, dstDir, "xz")
 	case strings.HasSuffix(name, ".tar.bz2"):
 		return extractTar(srcPath, dstDir, "bz2")
@@ -49,8 +51,11 @@ func extractTar(srcPath, dstDir, compression string) error {
 	case "bz2":
 		r = bzip2.NewReader(f)
 	case "xz":
-		// xz requires external dependency; for now return a clear error
-		return fmt.Errorf("xz extraction requires the 'xz' binary — install it and retry")
+		xr, err := xz.NewReader(f)
+		if err != nil {
+			return fmt.Errorf("open xz: %w", err)
+		}
+		r = xr
 	}
 
 	tr := tar.NewReader(r)

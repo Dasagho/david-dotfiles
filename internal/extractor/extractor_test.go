@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/ulikunitz/xz"
+
 	"github.com/dsaleh/david-dotfiles/internal/extractor"
 )
 
@@ -47,6 +49,36 @@ func TestExtract_zip(t *testing.T) {
 	zw.Close()
 
 	src, _ := os.CreateTemp("", "test-*.zip")
+	src.Write(buf.Bytes())
+	src.Close()
+	defer os.Remove(src.Name())
+
+	dst, _ := os.MkdirTemp("", "extract-dst-*")
+	defer os.RemoveAll(dst)
+
+	if err := extractor.Extract(src.Name(), dst); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "mybin")); err != nil {
+		t.Errorf("mybin not found in dst: %v", err)
+	}
+}
+
+func TestExtract_txz(t *testing.T) {
+	// Build a .txz (xz-compressed tar) with a single file "mybin"
+	var buf bytes.Buffer
+	xw, err := xz.NewWriter(&buf)
+	if err != nil {
+		t.Fatalf("create xz writer: %v", err)
+	}
+	tw := tar.NewWriter(xw)
+	content := []byte("#!/bin/sh\necho hello")
+	tw.WriteHeader(&tar.Header{Name: "mybin", Mode: 0755, Size: int64(len(content))})
+	tw.Write(content)
+	tw.Close()
+	xw.Close()
+
+	src, _ := os.CreateTemp("", "test-*.txz")
 	src.Write(buf.Bytes())
 	src.Close()
 	defer os.Remove(src.Name())
