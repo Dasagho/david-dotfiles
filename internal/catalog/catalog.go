@@ -1,6 +1,9 @@
 package catalog
 
-import "runtime"
+import (
+	"runtime"
+	"sort"
+)
 
 type SourceKind string
 
@@ -34,6 +37,7 @@ type Tool struct {
 	Command     string
 	VersionArgs []string
 	VersionFile string
+	Requires    []string
 	Config      []Link
 	Env         string
 	Sources     []Source
@@ -69,8 +73,9 @@ func All() []Tool {
 		},
 		{
 			Name: "sdkman", Description: "Gestor de SDK para la JVM", Command: "sdk", VersionArgs: []string{"version"}, VersionFile: "${HOME}/.local/share/sdkman/var/version",
-			Env:     "export SDKMAN_DIR=\"$HOME/.local/share/sdkman\"\n[ -s \"$SDKMAN_DIR/bin/sdkman-init.sh\" ] && source \"$SDKMAN_DIR/bin/sdkman-init.sh\"",
-			Sources: []Source{{Kind: Script, URL: "https://get.sdkman.io", ScriptEnv: map[string]string{"SDKMAN_DIR": "${HOME}/.local/share/sdkman"}, IsolateHome: true}},
+			Requires: []string{"curl", "zip", "unzip"},
+			Env:      "export SDKMAN_DIR=\"$HOME/.local/share/sdkman\"\n[ -s \"$SDKMAN_DIR/bin/sdkman-init.sh\" ] && source \"$SDKMAN_DIR/bin/sdkman-init.sh\"",
+			Sources:  []Source{{Kind: Script, URL: "https://get.sdkman.io", ScriptEnv: map[string]string{"SDKMAN_DIR": "${HOME}/.local/share/sdkman"}, IsolateHome: true}},
 		},
 		{
 			Name: "deno", Description: "Runtime para JavaScript y TypeScript", Command: "deno", VersionArgs: []string{"--version"},
@@ -144,6 +149,23 @@ func All() []Tool {
 		{Name: "opencode", Description: "Configuración de OpenCode", Command: "opencode", VersionArgs: []string{"--version"}, Config: []Link{{"configs/opencode/opencode.json", "${XDG_CONFIG_HOME}/opencode/opencode.json"}}},
 		{Name: "rofi", Description: "Configuración de Rofi", Command: "rofi", VersionArgs: []string{"-v"}, Config: []Link{{"configs/rofi/config.rasi", "${XDG_CONFIG_HOME}/rofi/config.rasi"}}},
 	}
+}
+
+// RequiredCommands returns the unique system commands that must be available
+// before installing the given tools.
+func RequiredCommands(tools []Tool) []string {
+	unique := map[string]struct{}{}
+	for _, tool := range tools {
+		for _, command := range tool.Requires {
+			unique[command] = struct{}{}
+		}
+	}
+	commands := make([]string, 0, len(unique))
+	for command := range unique {
+		commands = append(commands, command)
+	}
+	sort.Strings(commands)
+	return commands
 }
 
 func packages(linux, mac string) Source {

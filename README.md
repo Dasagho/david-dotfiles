@@ -38,6 +38,7 @@ dotfiles install fnm neovim    # instala; actualiza si hay una release nueva
 dotfiles update neovim         # equivalente explícito
 dotfiles install --all
 dotfiles status                # versión, método y fecha registrados
+dotfiles doctor                # comprueba curl, zip y unzip para SDKMAN
 dotfiles link git tmux nvim
 dotfiles link --all
 ```
@@ -46,6 +47,12 @@ dotfiles link --all
 compilaciones desde fuentes necesitan las herramientas y bibliotecas de
 desarrollo del sistema. Si fallan, la receta continúa con el gestor de paquetes
 disponible (`apt`, `dnf`, `pacman`, `zypper` o `brew`).
+
+Antes de instalar una herramienta se verifican sus prerequisitos declarados.
+SDKMAN requiere `curl`, `zip` y `unzip`; si falta alguno, `dotfiles install
+sdkman` lo instala primero usando el gestor de paquetes disponible y comprueba
+que haya quedado accesible en `PATH`. `dotfiles doctor` permite hacer solo la
+comprobación, sin instalar nada.
 
 ## Bash sin un `.bashrc` rígido
 

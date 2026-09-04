@@ -25,6 +25,25 @@ func TestRunOverridesExistingEnvironment(t *testing.T) {
 	}
 }
 
+func TestMissingPrerequisites(t *testing.T) {
+	m := &Manager{}
+	missing := m.MissingPrerequisites([]string{"sh", "dotfiles-command-that-does-not-exist"})
+	if len(missing) != 1 || missing[0] != "dotfiles-command-that-does-not-exist" {
+		t.Fatalf("unexpected missing commands: %v", missing)
+	}
+}
+
+func TestPrerequisitePackageMappings(t *testing.T) {
+	for _, manager := range []string{"apt", "dnf", "pacman", "zypper", "brew"} {
+		for _, command := range []string{"curl", "zip", "unzip"} {
+			got, ok := prerequisitePackage(manager, command)
+			if !ok || got != command {
+				t.Errorf("%s/%s = %q, %v", manager, command, got, ok)
+			}
+		}
+	}
+}
+
 func TestAtomicSymlinkReplacesOldLink(t *testing.T) {
 	temp := t.TempDir()
 	target := filepath.Join(temp, "tool")

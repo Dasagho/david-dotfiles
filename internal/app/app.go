@@ -75,6 +75,9 @@ func Run(args []string, version string) error {
 	case "status":
 		printStatus(installer)
 		return nil
+	case "doctor":
+		printDoctor(installer)
+		return nil
 	case "list":
 		for _, tool := range catalog.All() {
 			kind := "config"
@@ -104,6 +107,7 @@ func ensureBash(manager *configmanager.Manager) error {
 }
 
 func installMany(ctx context.Context, names []string, force bool, configs *configmanager.Manager, installer *install.Manager) error {
+	tools := make([]catalog.Tool, 0, len(names))
 	for _, name := range names {
 		tool, ok := catalog.Find(name)
 		if !ok {
@@ -112,10 +116,16 @@ func installMany(ctx context.Context, names []string, force bool, configs *confi
 		if len(tool.Sources) == 0 {
 			return fmt.Errorf("%s no tiene receta de instalación; usa 'dotfiles link %s' para su configuración", name, name)
 		}
+		tools = append(tools, tool)
+	}
+	if err := installer.EnsurePrerequisites(ctx, catalog.RequiredCommands(tools)); err != nil {
+		return err
+	}
+	for _, tool := range tools {
 		fmt.Printf("\n→ %s\n", tool.Name)
 		item, changed, err := installer.Install(ctx, tool, force)
 		if err != nil {
-			return fmt.Errorf("instalar %s: %w", name, err)
+			return fmt.Errorf("instalar %s: %w", tool.Name, err)
 		}
 		if changed {
 			fmt.Printf("  instalada %s mediante %s\n", item.Version, item.Method)
@@ -132,6 +142,29 @@ func installMany(ctx context.Context, names []string, force bool, configs *confi
 		}
 	}
 	return nil
+}
+
+func printDoctor(installer *install.Manager) {
+	commands := catalog.RequiredCommands(catalog.All())
+	if len(commands) == 0 {
+		fmt.Println("No hay prerequisitos declarados.")
+		return
+	}
+	missing := installer.MissingPrerequisites(commands)
+	missingSet := map[string]bool{}
+	for _, command := range missing {
+		missingSet[command] = true
+	}
+	for _, command := range commands {
+		status := "disponible"
+		if missingSet[command] {
+			status = "FALTA"
+		}
+		fmt.Printf("%-10s %s\n", command, status)
+	}
+	if len(missing) > 0 {
+		fmt.Println("Ejecuta 'dotfiles install sdkman' para instalarlos automáticamente.")
+	}
 }
 
 func linkMany(names []string, manager *configmanager.Manager) error {
@@ -225,6 +258,7 @@ func usage() {
   dotfiles link NOMBRE…     crea enlaces de configuración
   dotfiles link --all       enlaza todas las configuraciones
   dotfiles status           muestra versiones registradas
+	  dotfiles doctor           comprueba prerequisitos del catálogo
   dotfiles list             lista el catálogo
 `) + "\n")
 }

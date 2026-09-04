@@ -51,6 +51,59 @@ func New() (*Manager, error) {
 	return &Manager{Home: home, Share: share, Bin: filepath.Join(home, ".local", "bin"), StatePath: statePath, State: s, Client: &http.Client{Timeout: 10 * time.Minute}}, nil
 }
 
+// MissingPrerequisites reports commands unavailable in the current PATH.
+func (m *Manager) MissingPrerequisites(commands []string) []string {
+	missing := make([]string, 0)
+	for _, command := range commands {
+		if _, err := exec.LookPath(command); err != nil {
+			missing = append(missing, command)
+		}
+	}
+	return missing
+}
+
+// EnsurePrerequisites installs any missing command through the available system
+// package manager, then verifies that the commands became available.
+func (m *Manager) EnsurePrerequisites(ctx context.Context, commands []string) error {
+	missing := m.MissingPrerequisites(commands)
+	if len(missing) == 0 {
+		return nil
+	}
+	manager, args := packageManager()
+	if manager == "" {
+		return fmt.Errorf("faltan los prerequisitos %s y no se encontró apt, dnf, pacman, zypper ni brew", strings.Join(missing, ", "))
+	}
+	packages := make([]string, 0, len(missing))
+	for _, command := range missing {
+		packageName, ok := prerequisitePackage(manager, command)
+		if !ok {
+			return fmt.Errorf("no hay paquete conocido para el prerequisito %q con %s", command, manager)
+		}
+		packages = append(packages, packageName)
+	}
+	fmt.Printf("\n→ prerequisitos: faltan %s; instalando con %s\n", strings.Join(missing, ", "), manager)
+	args = append(args, packages...)
+	if err := run(ctx, m.Home, nil, args[0], args[1:]...); err != nil {
+		return fmt.Errorf("instalar prerequisitos: %w", err)
+	}
+	if stillMissing := m.MissingPrerequisites(missing); len(stillMissing) > 0 {
+		return fmt.Errorf("siguen sin estar disponibles tras la instalación: %s", strings.Join(stillMissing, ", "))
+	}
+	return nil
+}
+
+func prerequisitePackage(manager, command string) (string, bool) {
+	packages := map[string]map[string]string{
+		"apt":    {"curl": "curl", "zip": "zip", "unzip": "unzip"},
+		"dnf":    {"curl": "curl", "zip": "zip", "unzip": "unzip"},
+		"pacman": {"curl": "curl", "zip": "zip", "unzip": "unzip"},
+		"zypper": {"curl": "curl", "zip": "zip", "unzip": "unzip"},
+		"brew":   {"curl": "curl", "zip": "zip", "unzip": "unzip"},
+	}
+	name, ok := packages[manager][command]
+	return name, ok
+}
+
 func (m *Manager) Install(ctx context.Context, tool catalog.Tool, force bool) (state.Installation, bool, error) {
 	if len(tool.Sources) == 0 {
 		return state.Installation{}, false, fmt.Errorf("%s solo tiene configuración; no hay receta de instalación", tool.Name)
@@ -290,7 +343,11 @@ func packageManager() (string, []string) {
 		} else if _, err := exec.LookPath(choice.name); err != nil {
 			continue
 		}
-		return choice.name, choice.args
+		args := append([]string(nil), choice.args...)
+		if len(args) > 0 && args[0] == "sudo" && os.Geteuid() == 0 {
+			args = args[1:]
+		}
+		return choice.name, args
 	}
 	return "", nil
 }

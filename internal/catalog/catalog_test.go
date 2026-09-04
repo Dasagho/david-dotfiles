@@ -14,6 +14,23 @@ func TestRequestedCatalogEntriesExist(t *testing.T) {
 	}
 }
 
+func TestSDKMANPrerequisites(t *testing.T) {
+	sdkman, ok := Find("sdkman")
+	if !ok {
+		t.Fatal("sdkman is missing")
+	}
+	got := RequiredCommands([]Tool{sdkman})
+	want := []string{"curl", "unzip", "zip"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	}
+}
+
 func TestCurrentLinuxAMD64AssetNamesMatch(t *testing.T) {
 	cases := map[string]string{
 		"fnm":      "fnm-linux.zip",
