@@ -1,0 +1,16 @@
+[user]
+	# Define name y email en ~/.gitconfig.local (no versionado).
+[include]
+	path = ~/.gitconfig.local
+[init]
+	defaultBranch = main
+[core]
+	editor = nvim
+[pull]
+	rebase = true
+[push]
+	autoSetupRemote = true
+[fetch]
+	prune = true
+[rerere]
+	enabled = true

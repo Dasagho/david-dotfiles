@@ -1,0 +1,4 @@
+fund=false
+audit=true
+update-notifier=true
+prefix=${HOME}/.local/share/npm

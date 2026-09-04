@@ -1,0 +1,4 @@
+/dotfiles
+/dist/
+*.tmp
+.DS_Store

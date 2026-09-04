@@ -1,0 +1,230 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/dsaleh/dotfiles/internal/catalog"
+	configmanager "github.com/dsaleh/dotfiles/internal/config"
+	"github.com/dsaleh/dotfiles/internal/install"
+)
+
+func Run(args []string, version string) error {
+	root, err := findRoot()
+	if err != nil {
+		return err
+	}
+	configs, err := configmanager.New(root)
+	if err != nil {
+		return err
+	}
+	installer, err := install.New()
+	if err != nil {
+		return err
+	}
+	if err := ensureBash(configs); err != nil {
+		return fmt.Errorf("configurar bash: %w", err)
+	}
+
+	if len(args) == 0 {
+		selectable := installable()
+		initial := newModel(selectable, installer.State)
+		result, err := tea.NewProgram(initial, tea.WithAltScreen()).Run()
+		if err != nil {
+			return err
+		}
+		return installMany(context.Background(), result.(model).choices(), false, configs, installer)
+	}
+	switch args[0] {
+	case "install", "update":
+		fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
+		all := fs.Bool("all", false, "instalar todas")
+		force := fs.Bool("force", false, "reinstalar aunque la versión coincida")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		names := fs.Args()
+		if *all {
+			names = namesOf(installable())
+		}
+		if len(names) == 0 {
+			return errors.New("indica herramientas o usa --all")
+		}
+		return installMany(context.Background(), names, *force, configs, installer)
+	case "link":
+		fs := flag.NewFlagSet("link", flag.ContinueOnError)
+		all := fs.Bool("all", false, "enlazar todas las configuraciones")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		names := fs.Args()
+		if *all {
+			names = configurableNames()
+		}
+		if len(names) == 0 {
+			return errors.New("indica herramientas o usa --all")
+		}
+		return linkMany(names, configs)
+	case "status":
+		printStatus(installer)
+		return nil
+	case "list":
+		for _, tool := range catalog.All() {
+			kind := "config"
+			if len(tool.Sources) > 0 {
+				kind = "instalable"
+			}
+			fmt.Printf("%-10s %-10s %s\n", tool.Name, kind, tool.Description)
+		}
+		return nil
+	case "version", "--version", "-v":
+		fmt.Println(version)
+		return nil
+	case "help", "--help", "-h":
+		usage()
+		return nil
+	default:
+		return fmt.Errorf("comando desconocido %q; usa dotfiles help", args[0])
+	}
+}
+
+func ensureBash(manager *configmanager.Manager) error {
+	bash, _ := catalog.Find("bash")
+	if err := manager.Link(bash); err != nil {
+		return err
+	}
+	return manager.EnsureBash()
+}
+
+func installMany(ctx context.Context, names []string, force bool, configs *configmanager.Manager, installer *install.Manager) error {
+	for _, name := range names {
+		tool, ok := catalog.Find(name)
+		if !ok {
+			return fmt.Errorf("herramienta desconocida: %s", name)
+		}
+		if len(tool.Sources) == 0 {
+			return fmt.Errorf("%s no tiene receta de instalación; usa 'dotfiles link %s' para su configuración", name, name)
+		}
+		fmt.Printf("\n→ %s\n", tool.Name)
+		item, changed, err := installer.Install(ctx, tool, force)
+		if err != nil {
+			return fmt.Errorf("instalar %s: %w", name, err)
+		}
+		if changed {
+			fmt.Printf("  instalada %s mediante %s\n", item.Version, item.Method)
+		} else {
+			fmt.Printf("  ya está en %s\n", item.Version)
+		}
+		if err := configs.WriteEnv(tool.Name, tool.Env); err != nil {
+			return err
+		}
+		if len(tool.Config) > 0 {
+			if err := configs.Link(tool); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func linkMany(names []string, manager *configmanager.Manager) error {
+	for _, name := range names {
+		tool, ok := catalog.Find(name)
+		if !ok {
+			return fmt.Errorf("herramienta desconocida: %s", name)
+		}
+		if len(tool.Config) == 0 {
+			fmt.Printf("%s no tiene configuración versionada\n", name)
+			continue
+		}
+		if err := manager.Link(tool); err != nil {
+			return err
+		}
+		fmt.Printf("enlazada configuración de %s\n", name)
+	}
+	return nil
+}
+
+func printStatus(manager *install.Manager) {
+	names := make([]string, 0, len(manager.State.Tools))
+	for name := range manager.State.Tools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if len(names) == 0 {
+		fmt.Println("No hay instalaciones registradas.")
+		return
+	}
+	for _, name := range names {
+		item := manager.State.Tools[name]
+		fmt.Printf("%-10s %-20s %-22s %s\n", name, item.Version, item.Method, item.InstalledAt.Local().Format("2006-01-02 15:04"))
+	}
+}
+
+func installable() []catalog.Tool {
+	var result []catalog.Tool
+	for _, tool := range catalog.All() {
+		if len(tool.Sources) > 0 {
+			result = append(result, tool)
+		}
+	}
+	return result
+}
+func namesOf(tools []catalog.Tool) []string {
+	result := make([]string, len(tools))
+	for i, tool := range tools {
+		result[i] = tool.Name
+	}
+	return result
+}
+func configurableNames() []string {
+	var result []string
+	for _, tool := range catalog.All() {
+		if len(tool.Config) > 0 {
+			result = append(result, tool.Name)
+		}
+	}
+	return result
+}
+
+func findRoot() (string, error) {
+	if root := os.Getenv("DOTFILES_ROOT"); root != "" {
+		return filepath.Abs(root)
+	}
+	cwd, _ := os.Getwd()
+	if exists(filepath.Join(cwd, "configs")) {
+		return cwd, nil
+	}
+	executable, err := os.Executable()
+	if err == nil {
+		current := filepath.Dir(executable)
+		for i := 0; i < 5; i++ {
+			if exists(filepath.Join(current, "configs")) {
+				return current, nil
+			}
+			current = filepath.Dir(current)
+		}
+	}
+	return "", errors.New("no se encontró la raíz del repositorio; define DOTFILES_ROOT")
+}
+func exists(path string) bool { _, err := os.Stat(path); return err == nil }
+
+func usage() {
+	fmt.Print(strings.TrimSpace(`Uso:
+  dotfiles                  TUI de selección
+  dotfiles install NOMBRE…  instala o actualiza herramientas
+  dotfiles update NOMBRE…   alias de install
+  dotfiles install --all    instala todas
+  dotfiles link NOMBRE…     crea enlaces de configuración
+  dotfiles link --all       enlaza todas las configuraciones
+  dotfiles status           muestra versiones registradas
+  dotfiles list             lista el catálogo
+`) + "\n")
+}
