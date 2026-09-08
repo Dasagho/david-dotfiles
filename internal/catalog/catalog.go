@@ -130,11 +130,22 @@ func All() []Tool {
 		{Name: "wget", Description: "Descargas HTTP/FTP", Command: "wget", VersionArgs: []string{"--version"}, Sources: []Source{packages("wget", "wget")}},
 		{
 			Name: "git", Description: "Control de versiones", Command: "git", VersionArgs: []string{"--version"},
-			Config: []Link{{"configs/git/config", "${XDG_CONFIG_HOME}/git/config"}},
-			Sources: []Source{
-				{Kind: GitHubSource, Repo: "git/git", Build: []string{"make configure", "./configure --prefix={prefix}", "make -j{jobs} all", "make install"}, BinarySuffix: "bin/git"},
-				packages("git", "git"),
-			},
+			Config:  []Link{{"configs/git/config", "${XDG_CONFIG_HOME}/git/config"}},
+			Sources: []Source{packages("git", "git")},
+		},
+		{
+			Name: "lazygit", Description: "Interfaz TUI para Git", Command: "lazygit", VersionArgs: []string{"--version"},
+			Sources: []Source{{Kind: GitHubAsset, Repo: "jesseduffield/lazygit", Assets: map[string]string{
+				"linux-amd64": `^lazygit_.*_linux_x86_64\.tar\.gz$`, "linux-arm64": `^lazygit_.*_linux_arm64\.tar\.gz$`,
+				"darwin-amd64": `^lazygit_.*_darwin_x86_64\.tar\.gz$`, "darwin-arm64": `^lazygit_.*_darwin_arm64\.tar\.gz$`,
+			}, BinarySuffix: "lazygit"}},
+		},
+		{
+			Name: "lazydocker", Description: "Interfaz TUI para Docker", Command: "lazydocker", VersionArgs: []string{"--version"},
+			Sources: []Source{{Kind: GitHubAsset, Repo: "jesseduffield/lazydocker", Assets: map[string]string{
+				"linux-amd64": `^lazydocker_.*_Linux_x86_64\.tar\.gz$`, "linux-arm64": `^lazydocker_.*_Linux_arm64\.tar\.gz$`,
+				"darwin-amd64": `^lazydocker_.*_Darwin_x86_64\.tar\.gz$`, "darwin-arm64": `^lazydocker_.*_Darwin_arm64\.tar\.gz$`,
+			}, BinarySuffix: "lazydocker"}},
 		},
 		{
 			Name: "jq", Description: "Procesador JSON", Command: "jq", VersionArgs: []string{"--version"},
@@ -146,7 +157,14 @@ func All() []Tool {
 		{Name: "alacritty", Description: "Configuración de Alacritty", Command: "alacritty", VersionArgs: []string{"--version"}, Config: []Link{{"configs/alacritty/alacritty.toml", "${XDG_CONFIG_HOME}/alacritty/alacritty.toml"}}},
 		{Name: "bash", Description: "Configuración modular de Bash", Command: "bash", VersionArgs: []string{"--version"}, Config: []Link{{"configs/bash/config.bash", "${XDG_CONFIG_HOME}/bash/config.bash"}}},
 		{Name: "npm", Description: "Configuración de npm", Command: "npm", VersionArgs: []string{"--version"}, Config: []Link{{"configs/npm/npmrc", "${HOME}/.npmrc"}}},
-		{Name: "opencode", Description: "Configuración de OpenCode", Command: "opencode", VersionArgs: []string{"--version"}, Config: []Link{{"configs/opencode/opencode.json", "${XDG_CONFIG_HOME}/opencode/opencode.json"}}},
+		{
+			Name: "opencode", Description: "Agente de programación con IA", Command: "opencode", VersionArgs: []string{"--version"},
+			Config: []Link{{"configs/opencode/opencode.json", "${XDG_CONFIG_HOME}/opencode/opencode.json"}},
+			Sources: []Source{{Kind: GitHubAsset, Repo: "anomalyco/opencode", Assets: map[string]string{
+				"linux-amd64": `^opencode-linux-x64\.tar\.gz$`, "linux-arm64": `^opencode-linux-arm64\.tar\.gz$`,
+				"darwin-amd64": `^opencode-darwin-x64\.zip$`, "darwin-arm64": `^opencode-darwin-arm64\.zip$`,
+			}, BinarySuffix: "opencode"}},
+		},
 		{Name: "rofi", Description: "Configuración de Rofi", Command: "rofi", VersionArgs: []string{"-v"}, Config: []Link{{"configs/rofi/config.rasi", "${XDG_CONFIG_HOME}/rofi/config.rasi"}}},
 	}
 }

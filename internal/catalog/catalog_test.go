@@ -6,7 +6,7 @@ import (
 )
 
 func TestRequestedCatalogEntriesExist(t *testing.T) {
-	names := []string{"tmux", "fnm", "pnpm", "sdkman", "deno", "bun", "pyenv", "neovim", "tealdeer", "fzf", "ripgrep", "wget", "git", "jq", "alacritty", "bash", "npm", "opencode", "rofi"}
+	names := []string{"tmux", "fnm", "pnpm", "sdkman", "deno", "bun", "pyenv", "neovim", "tealdeer", "fzf", "ripgrep", "wget", "git", "lazygit", "lazydocker", "jq", "alacritty", "bash", "npm", "opencode", "rofi"}
 	for _, name := range names {
 		if _, ok := Find(name); !ok {
 			t.Errorf("missing %s", name)
@@ -33,15 +33,18 @@ func TestSDKMANPrerequisites(t *testing.T) {
 
 func TestCurrentLinuxAMD64AssetNamesMatch(t *testing.T) {
 	cases := map[string]string{
-		"fnm":      "fnm-linux.zip",
-		"pnpm":     "pnpm-linux-x64.tar.gz",
-		"deno":     "deno-x86_64-unknown-linux-gnu.zip",
-		"bun":      "bun-linux-x64.zip",
-		"neovim":   "nvim-linux-x86_64.tar.gz",
-		"tealdeer": "tealdeer-linux-x86_64-musl",
-		"fzf":      "fzf-0.74.3-linux_amd64.tar.gz",
-		"ripgrep":  "ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz",
-		"jq":       "jq-linux-amd64",
+		"fnm":        "fnm-linux.zip",
+		"pnpm":       "pnpm-linux-x64.tar.gz",
+		"deno":       "deno-x86_64-unknown-linux-gnu.zip",
+		"bun":        "bun-linux-x64.zip",
+		"neovim":     "nvim-linux-x86_64.tar.gz",
+		"tealdeer":   "tealdeer-linux-x86_64-musl",
+		"fzf":        "fzf-0.74.3-linux_amd64.tar.gz",
+		"ripgrep":    "ripgrep-15.2.0-x86_64-unknown-linux-musl.tar.gz",
+		"lazygit":    "lazygit_0.64.0_linux_x86_64.tar.gz",
+		"lazydocker": "lazydocker_0.25.2_Linux_x86_64.tar.gz",
+		"jq":         "jq-linux-amd64",
+		"opencode":   "opencode-linux-x64.tar.gz",
 	}
 	for name, asset := range cases {
 		tool, _ := Find(name)

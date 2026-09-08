@@ -39,9 +39,16 @@ dotfiles update neovim         # equivalente explícito
 dotfiles install --all
 dotfiles status                # versión, método y fecha registrados
 dotfiles doctor                # comprueba curl, zip y unzip para SDKMAN
+dotfiles verify                # verifica releases y assets publicados
 dotfiles link git tmux nvim
 dotfiles link --all
 ```
+
+`dotfiles verify` consulta todas las fuentes GitHub del catálogo, compara la
+última release con la versión registrada (si la herramienta está instalada) y
+comprueba que el asset de la plataforma actual o el tarball de fuentes responde
+correctamente. Un patrón obsoleto, un artefacto inaccesible o un error de GitHub
+produce un código de salida distinto de cero.
 
 `GITHUB_TOKEN` es opcional y evita el límite bajo de la API anónima. Las
 compilaciones desde fuentes necesitan las herramientas y bibliotecas de

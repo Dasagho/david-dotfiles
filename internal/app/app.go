@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/dsaleh/dotfiles/internal/catalog"
@@ -28,6 +29,14 @@ func Run(args []string, version string) error {
 	installer, err := install.New()
 	if err != nil {
 		return err
+	}
+	if len(args) > 0 && args[0] == "verify" {
+		if len(args) != 1 {
+			return errors.New("verify no acepta argumentos")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		return verifyGitHubReleases(ctx, installer)
 	}
 	if err := ensureBash(configs); err != nil {
 		return fmt.Errorf("configurar bash: %w", err)
@@ -167,6 +176,44 @@ func printDoctor(installer *install.Manager) {
 	}
 }
 
+func verifyGitHubReleases(ctx context.Context, installer *install.Manager) error {
+	checks := installer.VerifyGitHubSources(ctx, catalog.All())
+	if len(checks) == 0 {
+		fmt.Println("No hay fuentes GitHub en el catálogo.")
+		return nil
+	}
+	failures := 0
+	for _, check := range checks {
+		installed := "no instalada"
+		comparison := ""
+		if check.Installed {
+			installed = check.InstalledVersion
+			comparison = "al día"
+			if check.UpdateAvailable {
+				comparison = "actualización disponible"
+			}
+		}
+		latest := check.LatestVersion
+		if latest == "" {
+			latest = "desconocida"
+		}
+		if check.Err != nil {
+			failures++
+			fmt.Printf("ERROR %-10s %-13s repo=%s instalada=%s latest=%s: %v\n", check.ToolName, check.SourceKind, check.Repository, installed, latest, check.Err)
+			continue
+		}
+		fmt.Printf("OK    %-10s %-13s repo=%s instalada=%s latest=%s asset=%s", check.ToolName, check.SourceKind, check.Repository, installed, latest, check.Artifact)
+		if comparison != "" {
+			fmt.Printf(" · %s", comparison)
+		}
+		fmt.Println()
+	}
+	if failures > 0 {
+		return fmt.Errorf("fallaron %d de %d verificaciones de GitHub", failures, len(checks))
+	}
+	return nil
+}
+
 func linkMany(names []string, manager *configmanager.Manager) error {
 	for _, name := range names {
 		tool, ok := catalog.Find(name)
@@ -258,7 +305,8 @@ func usage() {
   dotfiles link NOMBRE…     crea enlaces de configuración
   dotfiles link --all       enlaza todas las configuraciones
   dotfiles status           muestra versiones registradas
-	  dotfiles doctor           comprueba prerequisitos del catálogo
+  dotfiles doctor           comprueba prerequisitos del catálogo
+  dotfiles verify           verifica releases y assets de GitHub
   dotfiles list             lista el catálogo
 `) + "\n")
 }

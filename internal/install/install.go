@@ -26,15 +26,32 @@ type Manager struct {
 	Home, Share, Bin, StatePath string
 	State                       *state.State
 	Client                      *http.Client
+	GitHubAPI                   string
+}
+
+type releaseAsset struct {
+	Name string `json:"name"`
+	URL  string `json:"browser_download_url"`
 }
 
 type release struct {
-	TagName    string `json:"tag_name"`
-	TarballURL string `json:"tarball_url"`
-	Assets     []struct {
-		Name string `json:"name"`
-		URL  string `json:"browser_download_url"`
-	} `json:"assets"`
+	TagName    string         `json:"tag_name"`
+	TarballURL string         `json:"tarball_url"`
+	Assets     []releaseAsset `json:"assets"`
+}
+
+// ReleaseCheck describes the state of one GitHub source in the catalog.
+type ReleaseCheck struct {
+	ToolName         string
+	Repository       string
+	SourceKind       catalog.SourceKind
+	InstalledVersion string
+	LatestVersion    string
+	Artifact         string
+	Installed        bool
+	UpdateAvailable  bool
+	Accessible       bool
+	Err              error
 }
 
 func New() (*Manager, error) {
@@ -48,7 +65,10 @@ func New() (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Manager{Home: home, Share: share, Bin: filepath.Join(home, ".local", "bin"), StatePath: statePath, State: s, Client: &http.Client{Timeout: 10 * time.Minute}}, nil
+	return &Manager{
+		Home: home, Share: share, Bin: filepath.Join(home, ".local", "bin"), StatePath: statePath,
+		State: s, Client: &http.Client{Timeout: 10 * time.Minute}, GitHubAPI: "https://api.github.com",
+	}, nil
 }
 
 // MissingPrerequisites reports commands unavailable in the current PATH.
@@ -141,17 +161,16 @@ func (m *Manager) installFrom(ctx context.Context, tool catalog.Tool, source cat
 }
 
 func (m *Manager) latest(ctx context.Context, repo string) (release, error) {
-	url := "https://api.github.com/repos/" + repo + "/releases/latest"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	api := strings.TrimRight(m.GitHubAPI, "/")
+	if api == "" {
+		api = "https://api.github.com"
+	}
+	req, err := m.githubRequest(ctx, http.MethodGet, api+"/repos/"+repo+"/releases/latest")
 	if err != nil {
 		return release{}, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "dotfiles-installer")
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	resp, err := m.Client.Do(req)
+	resp, err := m.httpClient().Do(req)
 	if err != nil {
 		return release{}, err
 	}
@@ -167,6 +186,122 @@ func (m *Manager) latest(ctx context.Context, repo string) (release, error) {
 		return release{}, errors.New("release sin versión")
 	}
 	return rel, nil
+}
+
+// VerifyGitHubSources checks the latest release and downloadable artifact for
+// every GitHub source, preserving catalog order in the returned results.
+func (m *Manager) VerifyGitHubSources(ctx context.Context, tools []catalog.Tool) []ReleaseCheck {
+	var checks []ReleaseCheck
+	for _, tool := range tools {
+		for _, source := range tool.Sources {
+			if source.Kind != catalog.GitHubAsset && source.Kind != catalog.GitHubSource {
+				continue
+			}
+			checks = append(checks, m.verifyGitHubSource(ctx, tool, source))
+		}
+	}
+	return checks
+}
+
+func (m *Manager) verifyGitHubSource(ctx context.Context, tool catalog.Tool, source catalog.Source) ReleaseCheck {
+	check := ReleaseCheck{ToolName: tool.Name, Repository: source.Repo, SourceKind: source.Kind}
+	if m.State != nil {
+		if current, ok := m.State.Tools[tool.Name]; ok {
+			check.Installed = true
+			check.InstalledVersion = current.Version
+		}
+	}
+	rel, err := m.latest(ctx, source.Repo)
+	if err != nil {
+		check.Err = fmt.Errorf("consultar última release: %w", err)
+		return check
+	}
+	check.LatestVersion = rel.TagName
+	check.UpdateAvailable = check.Installed && check.InstalledVersion != rel.TagName
+
+	var artifactURL string
+	if source.Kind == catalog.GitHubSource {
+		check.Artifact = "source.tar.gz"
+		artifactURL = rel.TarballURL
+		if artifactURL == "" {
+			check.Err = errors.New("la release no contiene un tarball de código fuente")
+			return check
+		}
+	} else {
+		patternText := source.Assets[catalog.Platform()]
+		if patternText == "" {
+			check.Err = fmt.Errorf("sin patrón de asset para %s", catalog.Platform())
+			return check
+		}
+		pattern, err := regexp.Compile(patternText)
+		if err != nil {
+			check.Err = fmt.Errorf("patrón de asset inválido %q: %w", patternText, err)
+			return check
+		}
+		var matches []releaseAsset
+		for _, asset := range rel.Assets {
+			if pattern.MatchString(asset.Name) {
+				matches = append(matches, asset)
+			}
+		}
+		if len(matches) == 0 {
+			check.Err = fmt.Errorf("ningún asset para %s coincide con %q", catalog.Platform(), patternText)
+			return check
+		}
+		if len(matches) > 1 {
+			check.Err = fmt.Errorf("%d assets para %s coinciden con %q", len(matches), catalog.Platform(), patternText)
+			return check
+		}
+		check.Artifact = matches[0].Name
+		artifactURL = matches[0].URL
+	}
+	if err := m.verifyAccessible(ctx, artifactURL); err != nil {
+		check.Err = fmt.Errorf("%s no accesible: %w", check.Artifact, err)
+		return check
+	}
+	check.Accessible = true
+	return check
+}
+
+func (m *Manager) verifyAccessible(ctx context.Context, url string) error {
+	req, err := m.githubRequest(ctx, http.MethodGet, url)
+	if err != nil {
+		return err
+	}
+	resp, err := m.httpClient().Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("GitHub respondió %s", resp.Status)
+	}
+	if _, err := io.CopyN(io.Discard, resp.Body, 1); err != nil {
+		if errors.Is(err, io.EOF) {
+			return errors.New("GitHub respondió sin contenido")
+		}
+		return err
+	}
+	return nil
+}
+
+func (m *Manager) githubRequest(ctx context.Context, method, url string) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "dotfiles-installer")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	return req, nil
+}
+
+func (m *Manager) httpClient() *http.Client {
+	if m.Client != nil {
+		return m.Client
+	}
+	return http.DefaultClient
 }
 
 func (m *Manager) installGitHub(ctx context.Context, tool catalog.Tool, source catalog.Source, force bool) (state.Installation, bool, error) {
