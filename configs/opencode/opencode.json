@@ -1,5 +1,61 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "theme": "system",
-  "autoupdate": true
+  "autoupdate": "notify",
+  "compaction": {
+    "auto": true,
+    "prune": true,
+    "tail_turns": 6
+  },
+  "instructions": [
+    "AGENTS.md"
+  ],
+  "logLevel": "INFO",
+  "plugin": [
+    "superpowers@git+https://github.com/obra/superpowers.git#v6.2.0"
+  ],
+  "permission": {
+    "bash": "ask",
+    "edit": "allow",
+    "external_directory": {
+      "*": "ask",
+      "~/.agents/skills/**": "allow",
+      "~/.aws/**": "deny",
+      "~/.claude/skills/**": "allow",
+      "~/.config/opencode/**": "allow",
+      "~/.gnupg/**": "deny",
+      "~/.kube/**": "deny",
+      "~/.ssh/**": "deny"
+    },
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "question": "allow",
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow"
+    },
+    "skill": "allow",
+    "task": "allow",
+    "todowrite": "allow",
+    "webfetch": "allow"
+  },
+  "share": "manual",
+  "shell": "/bin/bash",
+  "tool_output": {
+    "max_bytes": 32768,
+    "max_lines": 1200
+  },
+  "watcher": {
+    "ignore": [
+      "node_modules/**",
+      ".git/**",
+      "dist/**",
+      "build/**",
+      "coverage/**",
+      ".meteor/**",
+      "private/**"
+    ]
+  }
 }
